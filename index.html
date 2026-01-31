@@ -1,0 +1,550 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  deleteDoc, 
+  doc, 
+  query 
+} from 'firebase/firestore';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  signInWithCustomToken,
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  Search, 
+  Book, 
+  FileText, 
+  ExternalLink,
+  Layers,
+  Building2,
+  ChevronDown,
+  Plus,
+  Trash2,
+  Settings,
+  User,
+  Save,
+  Loader2,
+  Upload,
+  FileCheck,
+  AlertCircle,
+  X,
+  Eye,
+  EyeOff,
+  Lock,
+  LogOut,
+  ShieldCheck
+} from 'lucide-react';
+
+// --- Konfigurasi Firebase ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-sop-app';
+
+const GD_FOLDER_URL = "https://drive.google.com/drive/folders/1oPrp8f0knk7G1VsGCwu_8GWGf1Fe7MgZ";
+
+// Warna Tema (Mengadopsi Biru & Kuning Profesional)
+const COLORS = {
+  navy: "#003366",
+  yellow: "#FFCC00",
+  lightGray: "#F8F9FA"
+};
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [documents, setDocuments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // State Login
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginError, setLoginError] = useState('');
+
+  // State Unggah Berkas
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
+
+  // State Formulir
+  const [formData, setFormData] = useState({
+    judul: '',
+    jenis: 'SOP',
+    departemen: '',
+    link: '',
+    update: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+  });
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) { 
+        console.error("Kesalahan autentikasi:", error); 
+      }
+    };
+    initAuth();
+    const unsubscribeAuth = onAuthStateChanged(auth, setUser);
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    const docsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'documents');
+    const q = query(docsCollection);
+    const unsubscribeDocs = onSnapshot(q, (snapshot) => {
+        const docsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setDocuments(docsData);
+        setLoading(false);
+      }, (error) => {
+        console.error("Kesalahan Firestore:", error);
+        setLoading(false);
+      }
+    );
+    return () => unsubscribeDocs();
+  }, [user]);
+
+  const groupedDocs = useMemo(() => {
+    const filtered = documents.filter(doc => 
+      doc.judul.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      doc.departemen.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    const depts = [...new Set(filtered.map(d => d.departemen))].sort();
+    return depts.map(dept => ({
+      name: dept,
+      categories: [
+        { type: "SOP (Standard Operating Procedure)", items: filtered.filter(d => d.departemen === dept && d.jenis === "SOP") },
+        { type: "IK (Instruksi Kerja)", items: filtered.filter(d => d.departemen === dept && d.jenis === "IK") }
+      ].filter(cat => cat.items.length > 0)
+    }));
+  }, [documents, searchTerm]);
+
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (loginForm.username === 'admin' && loginForm.password === 'admin123') {
+      setIsAdmin(true);
+      setShowLoginModal(false);
+      setLoginError('');
+      setLoginForm({ username: '', password: '' });
+    } else {
+      setLoginError('Username atau Password salah!');
+    }
+  };
+
+  const handleLogout = () => {
+    setIsAdmin(false);
+    setLoginForm({ username: '', password: '' });
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file && file.type === "application/pdf") {
+      setSelectedFile(file);
+      if (!formData.judul) {
+        setFormData(prev => ({ ...prev, judul: file.name.replace(".pdf", "") }));
+      }
+    } else {
+      alert("Mohon pilih file format PDF");
+    }
+  };
+
+  const uploadToGoogleDrive = async (file) => {
+    setIsUploading(true);
+    setUploadProgress(10);
+    const interval = setInterval(() => {
+      setUploadProgress(prev => (prev < 90 ? prev + 15 : prev));
+    }, 500);
+
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        clearInterval(interval);
+        setUploadProgress(100);
+        resolve(`${GD_FOLDER_URL}?q=${encodeURIComponent(file.name)}`);
+      }, 2000);
+    });
+  };
+
+  const handleAddDocument = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    try {
+      let finalLink = formData.link;
+      if (selectedFile) {
+        finalLink = await uploadToGoogleDrive(selectedFile);
+      }
+      if (!finalLink) {
+        alert("Mohon masukkan link Google Drive atau pilih file untuk diunggah");
+        setIsUploading(false);
+        return;
+      }
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'documents'), {
+        ...formData,
+        link: finalLink,
+        fileName: selectedFile ? selectedFile.name : 'Tautan Manual',
+        createdAt: new Date().toISOString()
+      });
+      setFormData({
+        judul: '', jenis: 'SOP', departemen: '', link: '',
+        update: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+      });
+      setSelectedFile(null);
+      setIsUploading(false);
+      setUploadProgress(0);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } catch (err) {
+      console.error("Kesalahan saat menambah dokumen:", err);
+      setIsUploading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!user || !window.confirm("Hapus dokumen ini?")) return;
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'documents', id));
+    } catch (err) { console.error("Kesalahan saat menghapus:", err); }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F0F2F5] font-sans text-slate-900">
+      {/* Navigasi Utama */}
+      <nav className="bg-[#003366] sticky top-0 z-20 shadow-lg border-b-4 border-[#FFCC00]">
+        <div className="max-w-6xl mx-auto px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-[#FFCC00] p-2 rounded-lg shadow-inner">
+              <ShieldCheck className="w-6 h-6 text-[#003366]" />
+            </div>
+            <div>
+              <h1 className="text-lg font-black text-white leading-none tracking-tight">E-PROSEDUR</h1>
+              <p className="text-[10px] text-[#FFCC00] mt-1 uppercase tracking-widest font-bold">Direktorat Operation Dept Supplay Chain</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="relative flex-1 md:w-80">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input 
+                type="text" 
+                placeholder="Cari dokumen kerja..." 
+                className="w-full pl-9 pr-4 py-2 bg-white border-none rounded-md text-sm outline-none transition-all focus:ring-2 focus:ring-[#FFCC00]"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+              />
+            </div>
+            
+            {isAdmin ? (
+              <button 
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 bg-[#FFCC00] text-[#003366] hover:bg-white rounded-md text-sm font-bold transition-all shadow-md"
+              >
+                <LogOut className="w-4 h-4" /> Log Out
+              </button>
+            ) : (
+              <button 
+                onClick={() => setShowLoginModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-[#002244] text-[#FFCC00] hover:bg-[#001a33] border border-[#FFCC00]/30 rounded-md text-sm font-bold transition-all"
+              >
+                <Settings className="w-4 h-4" /> Admin
+              </button>
+            )}
+          </div>
+        </div>
+      </nav>
+
+      {/* Modal Login */}
+      {showLoginModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#003366]/80 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-300 border-t-8 border-[#FFCC00]">
+            <div className="bg-[#F8F9FA] p-6 border-b border-slate-100 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Lock className="w-6 h-6 text-[#003366]" />
+                <h2 className="text-xl font-black text-[#003366] uppercase tracking-tight">Otentikasi Admin</h2>
+              </div>
+              <button onClick={() => setShowLoginModal(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleLogin} className="p-8 space-y-5">
+              {loginError && (
+                <div className="bg-rose-50 text-rose-600 text-xs font-bold p-3 rounded border border-rose-100 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" /> {loginError}
+                </div>
+              )}
+              <div className="space-y-1">
+                <label className="text-xs font-black text-[#003366] uppercase tracking-widest">NIP / ID User</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input required type="text" placeholder="Masukkan ID" className="w-full pl-10 pr-4 py-3 bg-[#F8F9FA] border border-slate-200 rounded focus:ring-2 focus:ring-[#003366] outline-none text-sm font-medium" value={loginForm.username} onChange={(e) => setLoginForm({...loginForm, username: e.target.value})} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black text-[#003366] uppercase tracking-widest">Kata Sandi</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input required type={showPassword ? "text" : "password"} placeholder="Masukkan sandi" className="w-full pl-10 pr-12 py-3 bg-[#F8F9FA] border border-slate-200 rounded focus:ring-2 focus:ring-[#003366] outline-none text-sm font-medium" value={loginForm.password} onChange={(e) => setLoginForm({...loginForm, password: e.target.value})} />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#003366] transition-colors p-1">
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <button type="submit" className="w-full bg-[#003366] hover:bg-[#002244] text-white font-black py-3.5 rounded shadow-lg transition-all active:scale-95 uppercase tracking-widest">
+                MASUK SISTEM
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        {!user || loading ? (
+          <div className="flex flex-col items-center justify-center py-24 text-slate-400">
+            <Loader2 className="w-12 h-12 animate-spin mb-4 text-[#003366]" />
+            <p className="font-bold tracking-widest uppercase text-xs">Sinkronisasi Basis Data...</p>
+          </div>
+        ) : isAdmin ? (
+          <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="bg-white rounded border border-slate-200 shadow-sm overflow-hidden">
+              <div className="bg-[#003366] px-6 py-4 flex items-center justify-between text-white">
+                <h2 className="font-bold flex items-center gap-2 text-sm uppercase tracking-wider">
+                  <Upload className="w-5 h-5 text-[#FFCC00]" /> Input & Mutasi Dokumen
+                </h2>
+              </div>
+              
+              <form onSubmit={handleAddDocument} className="p-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#003366] uppercase tracking-widest">Judul Dokumen Prosedur</label>
+                      <input required type="text" placeholder="Masukkan judul..." className="w-full p-3 bg-[#F8F9FA] border border-slate-200 rounded focus:ring-2 focus:ring-[#003366] outline-none text-sm" value={formData.judul} onChange={e => setFormData({...formData, judul: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#003366] uppercase tracking-widest">Unit Kerja / Departemen</label>
+                      <input required type="text" placeholder="Misal: Operation Support..." className="w-full p-3 bg-[#F8F9FA] border border-slate-200 rounded focus:ring-2 focus:ring-[#003366] outline-none text-sm" value={formData.departemen} onChange={e => setFormData({...formData, departemen: e.target.value})} />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-[#003366] uppercase tracking-widest">Klasifikasi Dokumen</label>
+                      <select className="w-full p-3 bg-[#F8F9FA] border border-slate-200 rounded focus:ring-2 focus:ring-[#003366] outline-none text-sm font-bold" value={formData.jenis} onChange={e => setFormData({...formData, jenis: e.target.value})}>
+                        <option value="SOP">SOP (Standard Operating Procedure)</option>
+                        <option value="IK">IK (Instruksi Kerja)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-[#003366] uppercase tracking-widest text-center block">Unggah Berkas PDF</label>
+                    <div 
+                      onClick={() => fileInputRef.current.click()}
+                      className={`relative border-2 border-dashed rounded-lg p-10 transition-all cursor-pointer flex flex-col items-center justify-center text-center gap-4 ${selectedFile ? 'border-emerald-500 bg-emerald-50' : 'border-slate-300 bg-[#F8F9FA] hover:border-[#003366] hover:bg-white'}`}
+                    >
+                      <input type="file" hidden ref={fileInputRef} accept=".pdf" onChange={handleFileChange} />
+                      {selectedFile ? (
+                        <>
+                          <div className="bg-emerald-600 p-3 rounded-full shadow-lg"><FileCheck className="w-8 h-8 text-white" /></div>
+                          <div>
+                            <p className="text-sm font-black text-emerald-900 truncate max-w-[250px]">{selectedFile.name}</p>
+                            <p className="text-[10px] text-emerald-600 mt-1 font-black uppercase tracking-widest">BERKAS TERVERIFIKASI</p>
+                          </div>
+                          <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }} className="absolute top-4 right-4 p-1.5 bg-white text-rose-500 shadow-sm border border-rose-100 rounded-full hover:bg-rose-500 hover:text-white transition-all"><X className="w-4 h-4" /></button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="bg-[#003366] p-4 rounded-full shadow-md"><Upload className="w-8 h-8 text-[#FFCC00]" /></div>
+                          <div>
+                            <p className="text-sm font-bold text-[#003366]">Pilih Berkas PDF</p>
+                            <p className="text-[10px] text-slate-400 mt-2 font-medium">Klik untuk mencari di perangkat Anda</p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-slate-100 pt-8 flex justify-end">
+                  {isUploading ? (
+                    <div className="w-full max-w-md space-y-3">
+                      <div className="flex justify-between text-[10px] font-black text-[#003366] uppercase tracking-[0.2em]">
+                        <span>Mengirim Data ke Cloud Operation...</span>
+                        <span>{Math.round(uploadProgress)}%</span>
+                      </div>
+                      <div className="w-full bg-[#E9ECEF] h-3 rounded-full overflow-hidden shadow-inner">
+                        <div className="bg-[#003366] h-full transition-all duration-300 relative" style={{ width: `${uploadProgress}%` }}>
+                          <div className="absolute top-0 bottom-0 right-0 w-2 bg-[#FFCC00]"></div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <button type="submit" className="bg-[#003366] hover:bg-[#002244] text-white px-12 py-4 rounded font-black flex items-center justify-center gap-3 transition-all active:scale-95 shadow-xl uppercase tracking-widest text-xs">
+                      <Save className="w-4 h-4 text-[#FFCC00]" /> SIMPAN DOKUMEN KE SISTEM
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            {/* Daftar Inventaris Admin */}
+            <div className="bg-white rounded border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100 bg-[#F8F9FA] flex items-center justify-between">
+                <h3 className="font-black text-[#003366] text-xs uppercase tracking-widest">Daftar Inventaris Dokumen ({documents.length})</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[#003366] text-[#FFCC00] uppercase text-[10px] font-black">
+                    <tr>
+                      <th className="px-6 py-4 border-r border-[#FFCC00]/20">Nama Dokumen / Judul</th>
+                      <th className="px-6 py-4 border-r border-[#FFCC00]/20">Unit Kerja</th>
+                      <th className="px-6 py-4 border-r border-[#FFCC00]/20 text-center">Tipe</th>
+                      <th className="px-6 py-4 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {documents.map(item => (
+                      <tr key={item.id} className="hover:bg-[#F8F9FA] transition-all">
+                        <td className="px-6 py-5">
+                          <div className="font-bold text-[#003366] uppercase tracking-tight leading-tight">{item.judul}</div>
+                          <div className="text-[9px] text-slate-400 mt-1 font-black uppercase tracking-widest">DIPERBARUI: {item.update}</div>
+                        </td>
+                        <td className="px-6 py-5 text-slate-600 font-bold text-xs uppercase">{item.departemen}</td>
+                        <td className="px-6 py-5 text-center">
+                          <span className={`text-[9px] font-black px-3 py-1 rounded-full border ${item.jenis === 'SOP' ? 'border-[#003366]/20 bg-[#003366]/5 text-[#003366]' : 'border-amber-200 bg-amber-50 text-amber-600'}`}>
+                            {item.jenis}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-right">
+                          <button onClick={() => handleDelete(item.id)} className="text-slate-300 hover:text-rose-600 p-2 hover:bg-rose-50 rounded transition-all">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* TAMPILAN PENGGUNA */
+          <div className="animate-in fade-in duration-700">
+            <div className="mb-12 flex flex-col md:flex-row items-center gap-8 bg-white p-10 rounded-xl border border-slate-200 shadow-xl relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-[#FFCC00]/10 rounded-bl-full"></div>
+              <div className="absolute bottom-0 left-0 w-20 h-20 bg-[#003366]/5 rounded-tr-full"></div>
+              
+              <div className="bg-[#003366] p-6 rounded-2xl shadow-2xl relative z-10">
+                <Layers className="w-12 h-12 text-[#FFCC00]" />
+              </div>
+              <div className="relative z-10 text-center md:text-left">
+                <h2 className="text-3xl font-black text-[#003366] tracking-tighter uppercase mb-2">Pusat Data Prosedur Kerja</h2>
+                <div className="h-1.5 w-24 bg-[#FFCC00] mb-4 mx-auto md:mx-0"></div>
+                <p className="text-slate-500 text-sm font-medium leading-relaxed max-w-xl italic">
+                  Selamat datang di Sistem Manajemen SOP & Instruksi Kerja Direktorat Operation Dept Supplay Chain. Pastikan Anda merujuk pada dokumen terbaru untuk menjamin kepastian layanan.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-16">
+              {groupedDocs.length > 0 ? groupedDocs.map((dept) => (
+                <section key={dept.name} className="relative">
+                  <div className="flex items-center gap-4 mb-10 group">
+                    <div className="bg-[#003366] text-[#FFCC00] p-3 rounded shadow-lg transition-transform group-hover:scale-110">
+                      <Building2 className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1">
+                      <h2 className="text-2xl font-black text-[#003366] uppercase tracking-tighter">
+                        {dept.name}
+                      </h2>
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className="h-0.5 w-12 bg-[#FFCC00]"></div>
+                        <div className="h-0.5 w-4 bg-[#003366]"></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12 ml-4">
+                    {dept.categories.map((cat) => (
+                      <div key={cat.type} className="space-y-6">
+                        <div className="flex items-center gap-3 text-[#003366] font-black text-[11px] uppercase tracking-[0.3em] bg-[#F8F9FA] py-2 px-4 rounded-full border-l-4 border-[#FFCC00] w-fit">
+                          <ChevronDown className="w-4 h-4 text-[#FFCC00]" />
+                          <span>{cat.type}</span>
+                        </div>
+                        
+                        <div className="space-y-4">
+                          {cat.items.map((item) => (
+                            <a 
+                              key={item.id}
+                              href={item.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="group flex items-center justify-between p-5 bg-white rounded border-l-4 border-slate-200 hover:border-[#003366] hover:shadow-2xl transition-all duration-300"
+                            >
+                              <div className="flex items-center gap-5">
+                                <div className="bg-[#F8F9FA] group-hover:bg-[#003366] p-4 rounded transition-all text-[#003366] group-hover:text-[#FFCC00] shadow-inner">
+                                  <FileText className="w-6 h-6" />
+                                </div>
+                                <div>
+                                  <span className="text-sm font-black text-[#003366] group-hover:text-black block transition-colors mb-1 uppercase tracking-tight">
+                                    {item.judul}
+                                  </span>
+                                  <div className="flex items-center gap-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-500">REV: {item.update}</span>
+                                    <span className="flex items-center gap-1 text-[#003366]/40">
+                                      <div className="w-1 h-1 bg-[#FFCC00] rounded-full"></div>
+                                      PDF DOKUMEN
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="bg-[#003366] opacity-0 group-hover:opacity-100 p-3 rounded shadow-lg transition-all translate-x-4 group-hover:translate-x-0">
+                                <ExternalLink className="w-4 h-4 text-[#FFCC00]" />
+                              </div>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )) : (
+                <div className="text-center py-48 bg-white rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden">
+                   <div className="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-transparent via-[#FFCC00] to-transparent"></div>
+                   <div className="bg-[#F8F9FA] w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner border border-slate-100">
+                    <Search className="w-10 h-10 text-slate-200" />
+                  </div>
+                  <h3 className="text-2xl font-black text-[#003366] uppercase tracking-tighter">Data Tidak Tersedia</h3>
+                  <p className="text-slate-400 mt-3 font-medium text-sm">Silakan gunakan parameter pencarian yang berbeda.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </main>
+
+      <footer className="bg-[#002244] border-t-8 border-[#FFCC00] py-16 mt-20">
+        <div className="max-w-6xl mx-auto px-6 flex flex-col items-center gap-6">
+          <div className="bg-[#FFCC00] p-3 rounded-full">
+            <ShieldCheck className="w-8 h-8 text-[#003366]" />
+          </div>
+          <div className="text-center">
+            <p className="text-[#FFCC00] text-[10px] font-black uppercase tracking-[0.6em] mb-2">Dokumentasi Terpadu</p>
+            <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest leading-loose">
+              Direktorat Operation Dept Supplay Chain &copy; {new Date().getFullYear()} <br/>
+              Sistem Manajemen Prosedur Kerja 
+              GuoKing_
+            </p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
