@@ -32,32 +32,31 @@
         // DATA DOKUMEN (EDIT BAGIAN INI UNTUK MENAMBAH DATA PERMANEN)
         // ==========================================================
         const INITIAL_DOCS = [
-            { id: 1, judul: "Prosedur Pengadaan Barang", jenis: "SOP", departemen: "Logistik", update: "12 Jan 2024", link: "https://drive.google.com/file/d/1example/view" },
-            { id: 2, judul: "Instruksi Kerja Stock Opname", jenis: "IK", departemen: "Gudang", update: "15 Jan 2024", link: "https://drive.google.com/file/d/2example/view" },
+            { id: 1, judul: "Prosedur Pengadaan Barang", jenis: "SOP", departemen: "Logistik", update: "12 Jan 2024", link: "https://drive.google.com/file/d/1example/preview" },
+            { id: 2, judul: "Instruksi Kerja Stock Opname", jenis: "IK", departemen: "Gudang", update: "15 Jan 2024", link: "https://drive.google.com/file/d/2example/preview" },
         ];
 
         const GD_FOLDER_URL = "https://drive.google.com/drive/folders/1oPrp8f0knk7G1VsGCwu_8GWGf1Fe7MgZ";
 
         /**
-         * Komponen Icon yang diperbaiki untuk mencegah error 'removeChild'
-         * Kita menggunakan ref dan manipulasi innerHTML agar React mengabaikan 
-         * perubahan yang dilakukan oleh pustaka Lucide pada elemen ini.
+         * Fungsi untuk membersihkan link Google Drive agar toolbar tidak muncul.
+         * Mengubah /view menjadi /preview
          */
+        const getCleanLink = (link) => {
+            if (link && link.includes('drive.google.com') && link.includes('/view')) {
+                return link.replace('/view', '/preview');
+            }
+            return link;
+        };
+
         const Icon = ({ name, className }) => {
             const iconRef = useRef(null);
-
             useEffect(() => {
                 if (iconRef.current) {
-                    // Masukkan elemen i secara manual
                     iconRef.current.innerHTML = `<i data-lucide="${name}" class="${className}"></i>`;
-                    // Jalankan Lucide hanya pada elemen ini
-                    lucide.createIcons({
-                        node: iconRef.current
-                    });
+                    lucide.createIcons({ node: iconRef.current });
                 }
             }, [name, className]);
-
-            // Menggunakan span sebagai kontainer agar React tidak bingung saat Lucide mengganti tag i menjadi svg
             return <span ref={iconRef} className="inline-flex items-center justify-center"></span>;
         };
 
@@ -75,7 +74,6 @@
                 update: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
             });
 
-            // Logika Pengelompokan Data
             const groupedDocs = useMemo(() => {
                 const filtered = documents.filter(doc => 
                     (doc.judul?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
@@ -104,9 +102,11 @@
 
             const handleAddLocal = (e) => {
                 e.preventDefault();
-                const newDoc = { ...formData, id: Date.now() };
+                // Pastikan link yang diinput juga dikonversi ke /preview
+                const cleanLink = getCleanLink(formData.link);
+                const newDoc = { ...formData, link: cleanLink, id: Date.now() };
                 setDocuments([newDoc, ...documents]);
-                const confirmSave = confirm("Berhasil ditambah ke tampilan! \n\nINGAT: Anda harus menyalin kode data baru ini ke file index.html Anda di GitHub agar tersimpan permanen.");
+                confirm("Berhasil ditambah ke tampilan! \n\nINGAT: Anda harus menyalin kode data baru ini ke file index.html Anda di GitHub agar tersimpan permanen.");
                 setFormData({ ...formData, judul: '', link: '' });
             };
 
@@ -118,7 +118,6 @@
 
             return (
                 <div className="min-h-screen">
-                    {/* Header */}
                     <nav className="bg-[#003366] sticky top-0 z-20 shadow-lg border-b-4 border-[#FFCC00]">
                         <div className="max-w-6xl mx-auto px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-4 text-white">
                             <div className="flex items-center gap-4">
@@ -145,7 +144,6 @@
                         </div>
                     </nav>
 
-                    {/* Modal Login */}
                     {showLoginModal && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in text-slate-900">
                             <form onSubmit={handleLogin} className="bg-white rounded-xl shadow-2xl w-full max-w-md border-t-8 border-[#FFCC00] p-8">
@@ -191,13 +189,14 @@
                                         </div>
                                         <div className="bg-amber-50 p-6 rounded-lg border border-amber-200">
                                             <h4 className="text-amber-800 font-bold text-xs uppercase mb-2 flex items-center gap-2">
-                                                <Icon name="info" className="w-4 h-4" /> Instruksi
+                                                <Icon name="info" className="w-4 h-4" /> Instruksi Tampilan Bersih
                                             </h4>
-                                            <ol className="text-[11px] text-amber-700 list-decimal pl-4 space-y-2">
-                                                <li>Simpan file di Google Drive.</li>
+                                            <ol className="text-[11px] text-amber-700 list-decimal pl-4 space-y-2 leading-relaxed">
+                                                <li>Upload file ke Google Drive Anda.</li>
                                                 <li>Bagikan file (Anyone with link).</li>
-                                                <li>Tempel tautan ke form di samping.</li>
-                                                <li>Setelah klik "Tambah", jangan lupa perbarui file <code>index.html</code> Anda di repositori GitHub secara manual.</li>
+                                                <li>Tempel link ke form di samping.</li>
+                                                <li className="font-bold text-amber-900">Sistem akan otomatis mengubah akhiran "/view" menjadi "/preview" agar toolbar Google Drive tidak muncul saat dokumen dibuka.</li>
+                                                <li>Jangan lupa perbarui file <code>index.html</code> Anda di GitHub secara manual setelah menambah data.</li>
                                             </ol>
                                         </div>
                                         <div className="md:col-span-2 flex justify-end border-t pt-4">
@@ -229,7 +228,6 @@
                                 </div>
                             </div>
                         ) : (
-                            /* TAMPILAN PENGGUNA */
                             <div className="animate-fade-in">
                                 <div className="mb-12 bg-white p-10 rounded-xl border-l-8 border-[#003366] shadow-xl flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
                                     <div className="bg-[#003366] p-5 rounded-xl shadow-lg relative z-10 text-[#FFCC00]">
@@ -259,7 +257,7 @@
                                                         </h3>
                                                         <div className="space-y-4">
                                                             {cat.items.map(item => (
-                                                                <a key={item.id} href={item.link} target="_blank" className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-lg hover:border-[#003366] hover:shadow-2xl transition-all group">
+                                                                <a key={item.id} href={getCleanLink(item.link)} target="_blank" className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-lg hover:border-[#003366] hover:shadow-2xl transition-all group">
                                                                     <div className="flex items-center gap-5">
                                                                         <div className="p-3 bg-slate-50 group-hover:bg-[#003366] rounded-xl transition-colors text-slate-400 group-hover:text-[#FFCC00]">
                                                                             <Icon name="file-text" className="w-6 h-6" />
