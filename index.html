@@ -40,8 +40,25 @@ import {
   ShieldCheck
 } from 'lucide-react';
 
-// --- Konfigurasi Firebase ---
-const firebaseConfig = JSON.parse(__firebase_config);
+/**
+ * CATATAN UNTUK PENGGUNAAN DI GITHUB/LOKAL:
+ * 1. Pastikan Anda sudah menginstal dependensi: npm install firebase lucide-react
+ * 2. Setup Tailwind CSS di proyek Anda (tailwind.config.js).
+ * 3. Ganti variabel __firebase_config dengan objek konfigurasi dari Firebase Console Anda.
+ */
+
+// Konfigurasi Firebase (Menggunakan fallback untuk lingkungan lokal)
+const firebaseConfig = typeof __firebase_config !== 'undefined' 
+  ? JSON.parse(__firebase_config) 
+  : {
+      apiKey: "PASTE_YOUR_API_KEY_HERE",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
@@ -49,7 +66,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-sop-app';
 
 const GD_FOLDER_URL = "https://drive.google.com/drive/folders/1oPrp8f0knk7G1VsGCwu_8GWGf1Fe7MgZ";
 
-// Warna Tema (Mengadopsi Biru & Kuning Profesional)
+// Warna Tema Direktorat Operation Dept Supplay Chain
 const COLORS = {
   navy: "#003366",
   yellow: "#FFCC00",
@@ -104,6 +121,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
+    // Jalankan query ke Firestore menggunakan path standar lingkungan ini
     const docsCollection = collection(db, 'artifacts', appId, 'public', 'data', 'documents');
     const q = query(docsCollection);
     const unsubscribeDocs = onSnapshot(q, (snapshot) => {
@@ -228,7 +246,7 @@ export default function App() {
               <ShieldCheck className="w-6 h-6 text-[#003366]" />
             </div>
             <div>
-              <h1 className="text-lg font-black text-white leading-none tracking-tight">E-PROSEDUR</h1>
+              <h1 className="text-lg font-black text-white leading-none tracking-tight uppercase">E-PROSEDUR</h1>
               <p className="text-[10px] text-[#FFCC00] mt-1 uppercase tracking-widest font-bold">Direktorat Operation Dept Supplay Chain</p>
             </div>
           </div>
