@@ -29,7 +29,7 @@
         const { useState, useEffect, useMemo, useRef } = React;
 
         // ==========================================================
-        // DATA DOKUMEN (Edit bagian ini untuk menambah data secara manual)
+        // DATA DOKUMEN (EDIT BAGIAN INI UNTUK MENAMBAH DATA PERMANEN)
         // ==========================================================
         const INITIAL_DOCS = [
             { id: 1, judul: "Prosedur Pengadaan Barang", jenis: "SOP", departemen: "Logistik", update: "12 Jan 2024", link: "https://drive.google.com/file/d/1example/view" },
@@ -38,10 +38,27 @@
 
         const GD_FOLDER_URL = "https://drive.google.com/drive/folders/1oPrp8f0knk7G1VsGCwu_8GWGf1Fe7MgZ";
 
-        // Komponen Icon Lucide
+        /**
+         * Komponen Icon yang diperbaiki untuk mencegah error 'removeChild'
+         * Kita menggunakan ref dan manipulasi innerHTML agar React mengabaikan 
+         * perubahan yang dilakukan oleh pustaka Lucide pada elemen ini.
+         */
         const Icon = ({ name, className }) => {
-            useEffect(() => { lucide.createIcons(); }, []);
-            return <i data-lucide={name} className={className}></i>;
+            const iconRef = useRef(null);
+
+            useEffect(() => {
+                if (iconRef.current) {
+                    // Masukkan elemen i secara manual
+                    iconRef.current.innerHTML = `<i data-lucide="${name}" class="${className}"></i>`;
+                    // Jalankan Lucide hanya pada elemen ini
+                    lucide.createIcons({
+                        node: iconRef.current
+                    });
+                }
+            }, [name, className]);
+
+            // Menggunakan span sebagai kontainer agar React tidak bingung saat Lucide mengganti tag i menjadi svg
+            return <span ref={iconRef} className="inline-flex items-center justify-center"></span>;
         };
 
         function App() {
@@ -77,20 +94,26 @@
             const handleLogin = (e) => {
                 e.preventDefault();
                 if (loginForm.username === 'admin' && loginForm.password === 'admin123') {
-                    setIsAdmin(true); setShowLoginModal(false); setLoginError('');
-                } else { setLoginError('ID atau Password salah!'); }
+                    setIsAdmin(true); 
+                    setShowLoginModal(false); 
+                    setLoginError('');
+                } else { 
+                    setLoginError('ID atau Password salah!'); 
+                }
             };
 
             const handleAddLocal = (e) => {
                 e.preventDefault();
                 const newDoc = { ...formData, id: Date.now() };
                 setDocuments([newDoc, ...documents]);
+                const confirmSave = confirm("Berhasil ditambah ke tampilan! \n\nINGAT: Anda harus menyalin kode data baru ini ke file index.html Anda di GitHub agar tersimpan permanen.");
                 setFormData({ ...formData, judul: '', link: '' });
-                alert("Berhasil ditambah ke list sementara! Jangan lupa simpan kode di bawah.");
             };
 
             const handleDeleteLocal = (id) => {
-                setDocuments(documents.filter(d => d.id !== id));
+                if(confirm("Hapus dokumen ini dari daftar?")) {
+                    setDocuments(documents.filter(d => d.id !== id));
+                }
             };
 
             return (
@@ -103,16 +126,20 @@
                                     <Icon name="shield-check" className="w-6 h-6 text-[#003366]" />
                                 </div>
                                 <div>
-                                    <h1 className="text-lg font-black leading-none uppercase">E-PROSEDUR</h1>
-                                    <p className="text-[10px] text-[#FFCC00] mt-1 font-bold uppercase tracking-widest">Direktorat Operation Dept Supplay Chain</p>
+                                    <h1 className="text-lg font-black leading-none uppercase tracking-tighter">E-PROSEDUR</h1>
+                                    <p className="text-[10px] text-[#FFCC00] mt-1 font-bold uppercase tracking-widest leading-none">Direktorat Operation Dept Supplay Chain</p>
                                 </div>
                             </div>
                             <div className="flex items-center gap-3 w-full md:w-auto text-slate-900">
                                 <div className="relative flex-1 md:w-64">
-                                    <input type="text" placeholder="Cari dokumen..." className="w-full pl-4 pr-4 py-2 rounded text-sm outline-none focus:ring-2 focus:ring-[#FFCC00]" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                    <input type="text" placeholder="Cari dokumen..." className="w-full pl-10 pr-4 py-2 rounded text-sm outline-none focus:ring-2 focus:ring-[#FFCC00] bg-white" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                                    <div className="absolute left-3 top-2.5">
+                                        <Icon name="search" className="w-4 h-4 text-slate-400" />
+                                    </div>
                                 </div>
-                                <button onClick={() => isAdmin ? setIsAdmin(false) : setShowLoginModal(true)} className="px-5 py-2 bg-[#FFCC00] text-[#003366] rounded font-bold text-sm shadow-md hover:bg-white transition-all">
-                                    {isAdmin ? 'Logout Admin' : 'Admin'}
+                                <button onClick={() => isAdmin ? setIsAdmin(false) : setShowLoginModal(true)} className="px-5 py-2 bg-[#FFCC00] text-[#003366] rounded font-bold text-sm shadow-md hover:bg-white transition-all flex items-center gap-2">
+                                    <Icon name={isAdmin ? "log-out" : "user"} className="w-4 h-4" />
+                                    {isAdmin ? 'Logout' : 'Admin'}
                                 </button>
                             </div>
                         </div>
@@ -123,19 +150,19 @@
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in text-slate-900">
                             <form onSubmit={handleLogin} className="bg-white rounded-xl shadow-2xl w-full max-w-md border-t-8 border-[#FFCC00] p-8">
                                 <h2 className="text-xl font-black text-[#003366] mb-6 uppercase flex items-center gap-2">
-                                    <Icon name="lock" className="w-5 h-5" /> Login Otentikasi
+                                    <Icon name="lock" className="w-5 h-5" /> Login Admin
                                 </h2>
                                 {loginError && <p className="bg-red-50 text-red-600 text-xs font-bold p-3 rounded mb-4 italic">⚠️ {loginError}</p>}
                                 <div className="space-y-4">
-                                    <input required type="text" placeholder="admin" className="w-full p-3 bg-slate-50 border rounded outline-none focus:ring-2 focus:ring-[#003366]" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
+                                    <input required type="text" placeholder="ID User (admin)" className="w-full p-3 bg-slate-50 border rounded outline-none focus:ring-2 focus:ring-[#003366]" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
                                     <div className="relative">
-                                        <input required type={showPassword ? "text" : "password"} placeholder="admin123" className="w-full p-3 bg-slate-50 border rounded outline-none focus:ring-2 focus:ring-[#003366]" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
+                                        <input required type={showPassword ? "text" : "password"} placeholder="Sandi (admin123)" className="w-full p-3 bg-slate-50 border rounded outline-none focus:ring-2 focus:ring-[#003366]" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
                                         <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3.5 text-slate-400">
                                             <Icon name={showPassword ? "eye-off" : "eye"} className="w-4 h-4" />
                                         </button>
                                     </div>
                                 </div>
-                                <button className="w-full mt-8 bg-[#003366] text-white py-3.5 rounded font-black uppercase tracking-widest shadow-xl transition-all">Masuk Sistem</button>
+                                <button className="w-full mt-8 bg-[#003366] text-white py-3.5 rounded font-black uppercase tracking-widest shadow-xl transition-all">Masuk</button>
                                 <button type="button" onClick={() => setShowLoginModal(false)} className="w-full mt-2 text-slate-400 text-[10px] font-black uppercase py-2 hover:text-[#003366]">Batal</button>
                             </form>
                         </div>
@@ -144,49 +171,57 @@
                     <main className="max-w-6xl mx-auto px-6 py-10">
                         {isAdmin ? (
                             <div className="space-y-8 animate-fade-in text-slate-900">
-                                {/* Form Input Admin */}
                                 <div className="bg-white rounded shadow-sm overflow-hidden border">
                                     <div className="bg-[#003366] p-4 text-white font-bold text-sm uppercase flex items-center justify-between">
-                                        <span className="flex items-center gap-2"><Icon name="plus-circle" className="w-4 h-4 text-[#FFCC00]" /> Tambah Dokumen</span>
-                                        <a href={GD_FOLDER_URL} target="_blank" className="bg-[#FFCC00] text-[#003366] px-3 py-1 rounded text-[10px] font-black">UPLOAD KE GOOGLE DRIVE</a>
+                                        <span className="flex items-center gap-2"><Icon name="plus-circle" className="w-4 h-4 text-[#FFCC00]" /> Manajemen Dokumen</span>
+                                        <a href={GD_FOLDER_URL} target="_blank" className="bg-[#FFCC00] text-[#003366] px-3 py-1 rounded text-[10px] font-black hover:bg-white transition-colors">UPLOAD KE DRIVE</a>
                                     </div>
                                     <form onSubmit={handleAddLocal} className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                                         <div className="space-y-4">
                                             <input required placeholder="Judul Dokumen" className="w-full p-2.5 border rounded" value={formData.judul} onChange={e => setFormData({...formData, judul: e.target.value})} />
-                                            <input required placeholder="Departemen (Contoh: Logistik)" className="w-full p-2.5 border rounded" value={formData.departemen} onChange={e => setFormData({...formData, departemen: e.target.value})} />
-                                            <select className="w-full p-2.5 border rounded font-bold" value={formData.jenis} onChange={e => setFormData({...formData, jenis: e.target.value})}>
-                                                <option value="SOP">SOP</option>
-                                                <option value="IK">IK</option>
-                                            </select>
-                                            <input required placeholder="Tautan Google Drive (Salin link PDF)" className="w-full p-2.5 border rounded" value={formData.link} onChange={e => setFormData({...formData, link: e.target.value})} />
+                                            <input required placeholder="Unit Kerja / Dept" className="w-full p-2.5 border rounded" value={formData.departemen} onChange={e => setFormData({...formData, departemen: e.target.value})} />
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <select className="p-2.5 border rounded font-bold" value={formData.jenis} onChange={e => setFormData({...formData, jenis: e.target.value})}>
+                                                    <option value="SOP">SOP</option>
+                                                    <option value="IK">IK</option>
+                                                </select>
+                                                <input className="p-2.5 border rounded bg-slate-50" value={formData.update} disabled />
+                                            </div>
+                                            <input required placeholder="Link Google Drive" className="w-full p-2.5 border rounded" value={formData.link} onChange={e => setFormData({...formData, link: e.target.value})} />
                                         </div>
                                         <div className="bg-amber-50 p-6 rounded-lg border border-amber-200">
-                                            <h4 className="text-amber-800 font-bold text-xs uppercase mb-2">Cara Menggunakan Tanpa Firebase:</h4>
+                                            <h4 className="text-amber-800 font-bold text-xs uppercase mb-2 flex items-center gap-2">
+                                                <Icon name="info" className="w-4 h-4" /> Instruksi
+                                            </h4>
                                             <ol className="text-[11px] text-amber-700 list-decimal pl-4 space-y-2">
-                                                <li>Klik tombol kuning untuk <strong>Upload PDF</strong> ke Google Drive.</li>
-                                                <li>Dapatkan link <strong>"Share"</strong> dari PDF tersebut.</li>
-                                                <li>Isi formulir di samping dan klik <strong>Tambah Dokumen</strong>.</li>
-                                                <li>Data akan muncul di tabel bawah. Untuk menyimpannya permanen, Anda perlu mengedit kode <code>INITIAL_DOCS</code> di file HTML Anda.</li>
+                                                <li>Simpan file di Google Drive.</li>
+                                                <li>Bagikan file (Anyone with link).</li>
+                                                <li>Tempel tautan ke form di samping.</li>
+                                                <li>Setelah klik "Tambah", jangan lupa perbarui file <code>index.html</code> Anda di repositori GitHub secara manual.</li>
                                             </ol>
                                         </div>
                                         <div className="md:col-span-2 flex justify-end border-t pt-4">
-                                            <button className="bg-[#003366] text-white px-8 py-3 rounded font-black text-xs uppercase tracking-widest shadow-lg">Tambah Ke List</button>
+                                            <button className="bg-[#003366] text-white px-8 py-3 rounded font-black text-xs uppercase tracking-widest shadow-lg">Tambah Ke Daftar</button>
                                         </div>
                                     </form>
                                 </div>
 
-                                {/* Tabel Data Sementara */}
-                                <div className="bg-white rounded border overflow-hidden">
+                                <div className="bg-white rounded border shadow-sm overflow-hidden">
                                     <table className="w-full text-left text-sm">
                                         <thead className="bg-[#003366] text-[#FFCC00] uppercase text-[10px] font-black">
-                                            <tr><th className="p-4">Dokumen</th><th className="p-4">Departemen</th><th className="p-4 text-right">Aksi</th></tr>
+                                            <tr><th className="p-4">Dokumen</th><th className="p-4">Unit</th><th className="p-4 text-center">Tipe</th><th className="p-4 text-right">Aksi</th></tr>
                                         </thead>
                                         <tbody className="divide-y">
                                             {documents.map(d => (
-                                                <tr key={d.id}>
+                                                <tr key={d.id} className="hover:bg-slate-50">
                                                     <td className="p-4 font-bold text-[#003366]">{d.judul}</td>
                                                     <td className="p-4 uppercase text-xs font-bold text-slate-500">{d.departemen}</td>
-                                                    <td className="p-4 text-right"><button onClick={() => handleDeleteLocal(d.id)} className="text-red-500 font-black uppercase text-[10px]">Hapus</button></td>
+                                                    <td className="p-4 text-center">
+                                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${d.jenis === 'SOP' ? 'border-blue-100 text-blue-600 bg-blue-50' : 'border-amber-200 text-amber-600 bg-amber-50'}`}>{d.jenis}</span>
+                                                    </td>
+                                                    <td className="p-4 text-right">
+                                                        <button onClick={() => handleDeleteLocal(d.id)} className="p-2 text-red-500 hover:bg-red-50 rounded"><Icon name="trash-2" className="w-4 h-4" /></button>
+                                                    </td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -196,28 +231,22 @@
                         ) : (
                             /* TAMPILAN PENGGUNA */
                             <div className="animate-fade-in">
-                                <div className="mb-12 bg-white p-10 rounded-xl border-l-8 border-[#003366] shadow-xl flex items-center gap-8 relative overflow-hidden">
-                                    <div className="absolute right-0 top-0 opacity-10"><Icon name="layers" className="w-40 h-40" /></div>
-                                    <div className="bg-[#003366] p-5 rounded-xl shadow-lg relative z-10">
-                                        <Icon name="book-open" className="text-[#FFCC00] w-12 h-12" />
+                                <div className="mb-12 bg-white p-10 rounded-xl border-l-8 border-[#003366] shadow-xl flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+                                    <div className="bg-[#003366] p-5 rounded-xl shadow-lg relative z-10 text-[#FFCC00]">
+                                        <Icon name="book-open" className="w-12 h-12" />
                                     </div>
-                                    <div className="relative z-10 text-slate-900">
-                                        <h2 className="text-3xl font-black text-[#003366] uppercase tracking-tighter">Pusat Data Prosedur Kerja</h2>
-                                        <div className="h-1 w-20 bg-[#FFCC00] mt-2 mb-3"></div>
-                                        <p className="text-slate-500 text-sm italic leading-relaxed">Selamat datang di Sistem Manajemen SOP & Instruksi Kerja Direktorat Operation Dept Supplay Chain.</p>
+                                    <div className="relative z-10 text-slate-900 text-center md:text-left">
+                                        <h2 className="text-3xl font-black text-[#003366] uppercase tracking-tighter leading-none mb-2">Pusat Data Prosedur Kerja</h2>
+                                        <div className="h-1 w-20 bg-[#FFCC00] mt-2 mb-3 mx-auto md:mx-0"></div>
+                                        <p className="text-slate-500 text-sm italic leading-relaxed max-w-xl">Direktorat Operation Dept Supplay Chain.</p>
                                     </div>
                                 </div>
 
                                 <div className="space-y-20">
-                                    {groupedDocs.length === 0 ? (
-                                        <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200">
-                                            <Icon name="search" className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                                            <h3 className="text-xl font-black text-slate-300 uppercase">Dokumen tidak ditemukan</h3>
-                                        </div>
-                                    ) : groupedDocs.map(dept => (
+                                    {groupedDocs.map(dept => (
                                         <div key={dept.name} className="relative">
                                             <div className="flex items-center gap-4 mb-10">
-                                                <div className="bg-[#003366] p-2.5 rounded shadow-lg"><Icon name="building-2" className="text-[#FFCC00] w-6 h-6" /></div>
+                                                <div className="bg-[#003366] p-2.5 rounded shadow-lg text-[#FFCC00]"><Icon name="building-2" className="w-6 h-6" /></div>
                                                 <h2 className="text-2xl font-black text-[#003366] uppercase tracking-tight">{dept.name}</h2>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-10 ml-4">
@@ -232,16 +261,16 @@
                                                             {cat.items.map(item => (
                                                                 <a key={item.id} href={item.link} target="_blank" className="flex items-center justify-between p-5 bg-white border border-slate-200 rounded-lg hover:border-[#003366] hover:shadow-2xl transition-all group">
                                                                     <div className="flex items-center gap-5">
-                                                                        <div className="p-3 bg-slate-50 group-hover:bg-[#003366] rounded-xl transition-colors text-slate-400 group-hover:text-[#FFCC00] shadow-inner">
+                                                                        <div className="p-3 bg-slate-50 group-hover:bg-[#003366] rounded-xl transition-colors text-slate-400 group-hover:text-[#FFCC00]">
                                                                             <Icon name="file-text" className="w-6 h-6" />
                                                                         </div>
                                                                         <div>
-                                                                            <p className="text-sm font-black text-[#003366] group-hover:text-black uppercase tracking-tight transition-colors">{item.judul}</p>
-                                                                            <p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-widest">DIPERBARUI: {item.update}</p>
+                                                                            <p className="text-sm font-bold text-[#003366] group-hover:text-black uppercase tracking-tight transition-colors">{item.judul}</p>
+                                                                            <p className="text-[10px] font-black text-slate-400 mt-1 uppercase tracking-widest leading-none">UPDATE: {item.update}</p>
                                                                         </div>
                                                                     </div>
-                                                                    <div className="bg-[#003366] p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 shadow-lg shadow-indigo-200">
-                                                                        <Icon name="chevron-right" className="w-4 h-4 text-[#FFCC00]" />
+                                                                    <div className="bg-[#003366] p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0 shadow-lg text-[#FFCC00]">
+                                                                        <Icon name="chevron-right" className="w-4 h-4" />
                                                                     </div>
                                                                 </a>
                                                             ))}
@@ -257,14 +286,14 @@
                     </main>
 
                     <footer className="bg-[#002244] border-t-8 border-[#FFCC00] py-20 mt-20 text-center text-white">
-                        <div className="bg-[#FFCC00] w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl">
-                            <Icon name="shield-check" className="text-[#003366] w-10 h-10" />
+                        <div className="bg-[#FFCC00] w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6 shadow-2xl text-[#003366]">
+                            <Icon name="shield-check" className="w-10 h-10" />
                         </div>
-                        <p className="text-[#FFCC00] text-xs font-black uppercase tracking-[0.5em] mb-4">Dokumentasi Terpadu</p>
-                        <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest leading-loose max-w-sm mx-auto">
+                        <p className="text-[#FFCC00] text-xs font-black uppercase tracking-[0.5em] mb-4 leading-none">Dokumentasi Terpadu</p>
+                        <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest leading-relaxed max-w-sm mx-auto">
                             Direktorat Operation Dept Supplay Chain &copy; 2024 <br/>
                             Sistem Manajemen Prosedur Kerja <br/>
-                            <span className="text-[#FFCC00]/50">GuoKing_</span>
+                            <span className="text-[#FFCC00]/50 tracking-[0.3em]">GuoKing_</span>
                         </p>
                     </footer>
                 </div>
